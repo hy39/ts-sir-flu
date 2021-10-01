@@ -1,0 +1,411 @@
+---
+title: "Code for Lin et al., 2021"
+author: "CP Lin"
+date: "2021/6/12"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+```{r setup}
+library(INLA)
+```
+
+## prepare the data variable
+```{r}
+## read the raw data file from flu express
+dat0 <- read.csv("dat0.csv",header = T)  
+dat0$date = as.Date(dat0$ï..date, origin = "1899-12-30")
+
+
+### prepare "train0_combine"
+train0 = data.frame(dat0$date,dat0$real.flu.case)
+names(train0) = c("dates","I")
+
+train0_2016 = train0[35:62,] ## weekly
+train0_2016$yminus_one = train0$I[34:61]
+train0_2016$N = 7000000 - sum(train0$I[6:34])/0.2
+train0_2016$cumsum_yminus = cumsum(train0_2016$yminus_one)
+
+train0_2018 = train0[140:161,] ## weekly
+train0_2018$yminus_one = train0$I[139:160]
+train0_2018$N = 7000000 - sum(train0$I[105:139])/0.2
+train0_2018$cumsum_yminus = cumsum(train0_2018$yminus_one)
+
+train0_2019 = train0[185:210,] ## weekly
+train0_2019$yminus_one = train0$I[184:209]
+train0_2019$N = 7000000 - sum(train0$I[160:184])/0.2
+train0_2019$cumsum_yminus = cumsum(train0_2019$yminus_one)
+
+train0_2020 = train0[242:255,]  ## weekly
+train0_2020$yminus_one = train0$I[241:254]
+train0_2020$N = 7000000 - sum(train0$I[212:241])/0.2
+train0_2020$cumsum_yminus = cumsum(train0_2020$yminus_one)
+
+train0_2016$gp = 2016
+train0_2018$gp = 2018
+train0_2019$gp = 2019
+train0_2020$gp = 2020
+
+train0_combine = data.frame(rbind(train0_2016,train0_2018,train0_2019, train0_2020[1:8,]))
+
+train0_combine$gp2016 = train0_combine$gp==2016
+train0_combine$gp2018 = train0_combine$gp==2018
+train0_combine$gp2019 = train0_combine$gp==2019
+train0_combine$gp2020 = train0_combine$gp==2020
+
+train0_combine$logI = log(train0_combine$I)
+train0_combine$logyminus_one = log(train0_combine$yminus_one)
+train0_combine$cumsum_yminus_over_N = train0_combine$cumsum_yminus/train0_combine$N
+
+
+### prepare "train0_2020"
+train0_2020$logI = log(train0_2020$I)
+train0_2020$logyminus_one = log(train0_2020$yminus_one)
+train0_2020$cumsum_yminus_over_N = train0_2020$cumsum_yminus/train0_2020$N
+
+
+##########################  prepare correction factor for reporting rate from severe cases
+cf_2016 = sum(dat0$severe_case[match(train0_2016$dates,dat0$date)])/sum(train0_2016$I) ## 2016
+cf_2018 = sum(dat0$severe_case[match(train0_2018$dates,dat0$date)])/sum(train0_2018$I)  ## 2018
+cf_2019 = sum(dat0$severe_case[match(train0_2019$dates,dat0$date)])/sum(train0_2019$I)  ## 2019
+
+```
+
+## original prediction for 2020 winter flu season without COVID-19
+## with "train0_combine"" 
+```{r}
+### poisson regression with INLA
+set.seed(1992)
+m.pois <- inla(I ~ logyminus_one + cumsum_yminus_over_N + gp2016 + gp2018 + gp2019 ,family = "poisson",data = train0_combine,control.predictor = list(compute=T),control.compute = list(config=T),control.fixed = list(mean=list(logyminus_one=1,default=0),prec=list(logyminus_one=100000000000)))
+summary(m.pois)
+
+############################# predict 2020 winter flu season #####################
+##################  mean   ############################
+new_dat0 = train0_combine[nrow(train0_combine),]   ## start from week 8 in year 2020
+
+new_dat0 = rbind(new_dat0,NA)
+new_dat0[nrow(new_dat0),"yminus_one"] = new_dat0[nrow(new_dat0)-1,"I"]
+new_dat0[nrow(new_dat0),"cumsum_yminus"] = new_dat0[nrow(new_dat0)-1,"cumsum_yminus"]+new_dat0[nrow(new_dat0),"yminus_one"]
+new_dat0[nrow(new_dat0),"N"] = new_dat0$N[1]
+new_dat0[nrow(new_dat0),"cumsum_yminus_over_N"] = new_dat0[nrow(new_dat0),"cumsum_yminus"]/new_dat0[nrow(new_dat0),"N"]
+new_dat0[nrow(new_dat0),"logyminus_one"] = log(new_dat0[nrow(new_dat0),"yminus_one"])
+
+for (i in 1:20){
+
+  y0 = c(train0_combine$I,NA)
+  x1 = c(train0_combine$logyminus_one,new_dat0$logyminus_one[nrow(new_dat0)])
+  x2 = c(train0_combine$cumsum_yminus_over_N,new_dat0$cumsum_yminus_over_N[nrow(new_dat0)])
+  x3 = c(train0_combine$gp2016,FALSE)
+  x4 = c(train0_combine$gp2018,FALSE)
+  x5 = c(train0_combine$gp2019,FALSE)
+  
+  dat0_poi = data.frame(y0,x1,x2,x3,x4,x5)
+  
+  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T))
+  
+  pred0_log = tail(m.pois00$summary.fitted.values$mean,1)   ## consider the mean of bayesian 
+
+  new_dat0[nrow(new_dat0),"logI"] = pred0_log
+  new_dat0[nrow(new_dat0),"I"] = exp(pred0_log)
+
+  new_dat0 = rbind(new_dat0,NA)
+  new_dat0[nrow(new_dat0),"yminus_one"] = new_dat0[nrow(new_dat0)-1,"I"]
+  new_dat0[nrow(new_dat0),"cumsum_yminus"] = new_dat0[nrow(new_dat0)-1,"cumsum_yminus"]+new_dat0[nrow(new_dat0),"yminus_one"]
+  new_dat0[nrow(new_dat0),"N"] = new_dat0$N[1]
+  new_dat0[nrow(new_dat0),"cumsum_yminus_over_N"] = new_dat0[nrow(new_dat0),"cumsum_yminus"]/new_dat0[nrow(new_dat0),"N"]
+  new_dat0[nrow(new_dat0),"logyminus_one"] = new_dat0[nrow(new_dat0)-1,"logI"]
+}
+
+new_dat0$row_name=seq(from = match(train0_combine[nrow(train0_combine),"I"],train0_2020$I),length.out = nrow(new_dat0)) #### start from week 8 in year 2020
+new_dat0_origin_model_INLA = new_dat0
+
+
+############################################################################################
+################## 0.025 quantile #####################################################
+new_dat0 = train0_combine[nrow(train0_combine),]   ## start from week 8 in year 2020
+
+new_dat0 = rbind(new_dat0,NA)
+new_dat0[nrow(new_dat0),"yminus_one"] = new_dat0[nrow(new_dat0)-1,"I"]
+new_dat0[nrow(new_dat0),"cumsum_yminus"] = new_dat0[nrow(new_dat0)-1,"cumsum_yminus"]+new_dat0[nrow(new_dat0),"yminus_one"]
+new_dat0[nrow(new_dat0),"N"] = new_dat0$N[1]
+new_dat0[nrow(new_dat0),"cumsum_yminus_over_N"] = new_dat0[nrow(new_dat0),"cumsum_yminus"]/new_dat0[nrow(new_dat0),"N"]
+new_dat0[nrow(new_dat0),"logyminus_one"] = log(new_dat0[nrow(new_dat0),"yminus_one"])
+
+for (i in 1:20){
+
+  y0 = c(train0_combine$I,NA)
+  x1 = c(train0_combine$logyminus_one,new_dat0$logyminus_one[nrow(new_dat0)])
+  x2 = c(train0_combine$cumsum_yminus_over_N,new_dat0$cumsum_yminus_over_N[nrow(new_dat0)])
+  x3 = c(train0_combine$gp2016,FALSE)
+  x4 = c(train0_combine$gp2018,FALSE)
+  x5 = c(train0_combine$gp2019,FALSE)
+  
+  dat0_poi = data.frame(y0,x1,x2,x3,x4,x5)
+  
+  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T))
+  
+  pred0_log = tail(m.pois00$summary.fitted.values$"0.025quant",1)   ## consider the 0.025quantile of bayesian
+
+  new_dat0[nrow(new_dat0),"logI"] = pred0_log
+  new_dat0[nrow(new_dat0),"I"] = exp(pred0_log)
+
+  new_dat0 = rbind(new_dat0,NA)
+  new_dat0[nrow(new_dat0),"yminus_one"] = new_dat0[nrow(new_dat0)-1,"I"]
+  new_dat0[nrow(new_dat0),"cumsum_yminus"] = new_dat0[nrow(new_dat0)-1,"cumsum_yminus"]+new_dat0[nrow(new_dat0),"yminus_one"]
+  new_dat0[nrow(new_dat0),"N"] = new_dat0$N[1]
+  new_dat0[nrow(new_dat0),"cumsum_yminus_over_N"] = new_dat0[nrow(new_dat0),"cumsum_yminus"]/new_dat0[nrow(new_dat0),"N"]
+  new_dat0[nrow(new_dat0),"logyminus_one"] = new_dat0[nrow(new_dat0)-1,"logI"]
+}
+
+new_dat0$row_name=seq(from = match(train0_combine[nrow(train0_combine),"I"],train0_2020$I),length.out = nrow(new_dat0)) #### start from week 8 in year 2020
+new_dat0_origin_model_0.025quan = new_dat0
+
+############################################################################################
+################## 0.975 quantile ####################################################
+new_dat0 = train0_combine[nrow(train0_combine),]   ## start from week 8 in year 2020
+
+new_dat0 = rbind(new_dat0,NA)
+new_dat0[nrow(new_dat0),"yminus_one"] = new_dat0[nrow(new_dat0)-1,"I"]
+new_dat0[nrow(new_dat0),"cumsum_yminus"] = new_dat0[nrow(new_dat0)-1,"cumsum_yminus"]+new_dat0[nrow(new_dat0),"yminus_one"]
+new_dat0[nrow(new_dat0),"N"] = new_dat0$N[1]
+new_dat0[nrow(new_dat0),"cumsum_yminus_over_N"] = new_dat0[nrow(new_dat0),"cumsum_yminus"]/new_dat0[nrow(new_dat0),"N"]
+new_dat0[nrow(new_dat0),"logyminus_one"] = log(new_dat0[nrow(new_dat0),"yminus_one"])
+
+for (i in 1:20){
+
+  y0 = c(train0_combine$I,NA)
+  x1 = c(train0_combine$logyminus_one,new_dat0$logyminus_one[nrow(new_dat0)])
+  x2 = c(train0_combine$cumsum_yminus_over_N,new_dat0$cumsum_yminus_over_N[nrow(new_dat0)])
+  x3 = c(train0_combine$gp2016,FALSE)
+  x4 = c(train0_combine$gp2018,FALSE)
+  x5 = c(train0_combine$gp2019,FALSE)
+  
+  dat0_poi = data.frame(y0,x1,x2,x3,x4,x5)
+  
+  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T))
+  
+  pred0_log = tail(m.pois00$summary.fitted.values$"0.975quant",1)   ## consider the 0.975quantile of bayesian
+  
+  new_dat0[nrow(new_dat0),"logI"] = pred0_log
+  new_dat0[nrow(new_dat0),"I"] = exp(pred0_log)
+
+  new_dat0 = rbind(new_dat0,NA)
+  new_dat0[nrow(new_dat0),"yminus_one"] = new_dat0[nrow(new_dat0)-1,"I"]
+  new_dat0[nrow(new_dat0),"cumsum_yminus"] = new_dat0[nrow(new_dat0)-1,"cumsum_yminus"]+new_dat0[nrow(new_dat0),"yminus_one"]
+  new_dat0[nrow(new_dat0),"N"] = new_dat0$N[1]
+  new_dat0[nrow(new_dat0),"cumsum_yminus_over_N"] = new_dat0[nrow(new_dat0),"cumsum_yminus"]/new_dat0[nrow(new_dat0),"N"]
+  new_dat0[nrow(new_dat0),"logyminus_one"] = new_dat0[nrow(new_dat0)-1,"logI"]
+}
+
+new_dat0$row_name=seq(from = match(train0_combine[nrow(train0_combine),"I"],train0_2020$I),length.out = nrow(new_dat0)) #### start from week 8 in year 2020
+new_dat0_origin_model_0.975quan = new_dat0
+
+```
+
+
+## Model the flu dynamic with COVID-19
+```{r}
+R0_1st_mean_all = NULL
+ori_report_rate_all = NULL
+adj_report_rate1_all = NULL
+adj_report_rate2_all = NULL
+Rt_all_over_p_all = NULL
+prior_res0 = NULL
+
+
+set.seed(1992)
+for (kk in 1:500){
+  print(kk)
+  tscal0 = 2  ## time scale (Tc)
+  
+  ##  fitting poisson regression model on Phase 1
+  m.pois <- inla(I ~ logyminus_one + cumsum_yminus_over_N + gp2016 + gp2018 + gp2019 ,family = "poisson",data = train0_combine,control.predictor = list(compute=T),control.fixed = list(mean=list(logyminus_one=1, default=0),prec=list(logyminus_one=100000000000)))
+  
+  summary(m.pois)
+  
+  ## inverse transform sampling to get the distribution of original report rate (Phase 1)
+  gen0 = runif(1)
+  nval0 = approx(cumsum(m.pois$marginals.fixed$cumsum_yminus_over_N[,2])/sum(m.pois$marginals.fixed$cumsum_yminus_over_N[,2]),m.pois$marginals.fixed$cumsum_yminus_over_N[,1],xout = gen0)$y
+  ## rho
+  ori_report_rate = tscal0/(nval0*-1)  ## coef for cumsum_yminus_over_N 
+  ori_report_rate_all = c(ori_report_rate_all,ori_report_rate)
+  
+  ## inverse transform sampling for R0
+  gen00 = runif(1)
+  nval00 = approx(cumsum(m.pois$marginals.fixed$`(Intercept)`[,2])/sum(m.pois$marginals.fixed$`(Intercept)`[,2]),m.pois$marginals.fixed$`(Intercept)`[,1],xout = gen00)$y
+  
+  R0_1st_mean = exp(nval00/tscal0)  
+  R0_1st_mean_all = c(R0_1st_mean_all,R0_1st_mean)
+  
+  R0_1st_025 = exp((m.pois$summary.fixed$"0.025quant"[1])/tscal0)
+  R0_1st_975 = exp((m.pois$summary.fixed$"0.975quant"[1])/tscal0)
+
+  
+  ## to prepare for calculating the correction factor for adjusted report rate (Phase 2)
+  train0_2020_second_half = train0_2020[9:11,]
+  cf_2020_second_half = sum(dat0$severe_case[match(train0_2020_second_half$dates,dat0$date)])/sum(train0_2020_second_half$I)  ## 2020 second half
+  cf_covid1 = cf_2020_second_half/mean(c(cf_2016,cf_2018,cf_2019))
+  new_coef0 = tscal0/(ori_report_rate/cf_covid1)*(-1)
+  ## adjusted reporting rate for Phase 2
+  adj_report_rate1 = tscal0/((new_coef0)*-1)
+  adj_report_rate1_all = c(adj_report_rate1_all,adj_report_rate1)
+  
+  ## to prepare for calculating the correction factor for adjusted report rate (Phase 3)
+  train0_2020_second_half = train0_2020[12:14,]
+  cf_2020_second_half = sum(dat0$severe_case[match(train0_2020_second_half$dates,dat0$date)])/sum(train0_2020_second_half$I)  ## 2020 second half
+  cf_covid2 = cf_2020_second_half/mean(c(cf_2016,cf_2018,cf_2019))
+  new_coef0 = tscal0/(ori_report_rate/cf_covid2)*(-1)
+  ## adjusted reporting rate
+  adj_report_rate2 = tscal0/((new_coef0)*-1)
+  adj_report_rate2_all = c(adj_report_rate2_all,adj_report_rate2)
+}
+
+### calculate prior for the term cumsum_yminus_over_N_p (i.e., "x2")
+f3 <- function(par){
+  (qnorm(p = 0.025,mean = 2,sd = par[1]) - 2/(quantile(adj_report_rate2_all,probs = c(0.975))/mean(adj_report_rate2_all)))^2 + (qnorm(p = 0.975,mean = 2,sd = par[1]) - 2/(quantile(adj_report_rate2_all,probs = c(0.025))/mean(adj_report_rate2_all)))^2
+}
+prior_res0 <- optimize(f = f3,interval = c(0,1))
+
+## the precision value of "x2" is referenced by the variance of adjusted reporting rate
+prior0_prec_x2 = 1/(prior_res0$minimum^2) ## prior to incorporate the uncertainty in reporting rate
+prior0_prec_x1 = 1000000000  ## precision value for "x1"
+
+################### modeling the Phase 2
+##################################    week number: 9-11
+new_2020_dat0 = data.frame(train0_2020$I[9:11],train0_2020$logyminus_one[9:11],train0_2020$cumsum_yminus_over_N[9:11])
+names(new_2020_dat0)=c("I","logyminus_one","cumsum_yminus_over_N")
+
+new_2020_dat0$cumsum_yminus_over_N*train0_2020$N[1]
+new_2020_dat0$cumsum_yminus_over_N_p = new_2020_dat0$cumsum_yminus_over_N
+new_2020_dat0$cumsum_yminus_over_N_p[1] = new_2020_dat0$cumsum_yminus_over_N[1]/mean(ori_report_rate_all)
+new_2020_dat0$cumsum_yminus_over_N_p[2] = new_2020_dat0$cumsum_yminus_over_N_p[1] + new_2020_dat0$I[1]/(train0_2020$N[1]*mean(adj_report_rate1_all))
+new_2020_dat0$cumsum_yminus_over_N_p[3] = new_2020_dat0$cumsum_yminus_over_N_p[2] + new_2020_dat0$I[2]/(train0_2020$N[1]*mean(adj_report_rate1_all))
+
+new_2020_dat0$logyminus_one_over_p = new_2020_dat0$logyminus_one
+new_2020_dat0$logyminus_one_over_p[1] =  new_2020_dat0$logyminus_one[1] - log(mean(ori_report_rate_all))
+new_2020_dat0$logyminus_one_over_p[2] =  new_2020_dat0$logyminus_one[2] - log(mean(adj_report_rate1_all))
+new_2020_dat0$logyminus_one_over_p[3] =  new_2020_dat0$logyminus_one[3] - log(mean(adj_report_rate1_all))
+
+new_2020_dat0$I_over_p = round(new_2020_dat0$I/mean(adj_report_rate1_all),digits = 0)
+
+#### to prepare for the regression fit
+y0 = c(new_2020_dat0$I_over_p,rep(NA,length(new_2020_dat0$I)))
+x1 = rep(new_2020_dat0$logyminus_one_over_p,2)
+x2 = rep(new_2020_dat0$cumsum_yminus_over_N_p,2)
+dat0_poi = data.frame(y0,x1,x2)
+
+m.pois_new <- inla(y0 ~ x1 + x2  ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T),control.fixed = list(mean=list(x1=m.pois$summary.fixed$mean[2], x2=-tscal0, default=0),prec=list(x1=prior0_prec_x1, x2=prior0_prec_x2))) 
+
+summary(m.pois_new)
+m.pois_new_second = m.pois_new
+
+## new R0 for Phase 2
+R0_2nd_mean = exp((m.pois_new_second$summary.fixed$mean[1])/tscal0)
+R0_2nd_025 = exp((m.pois_new_second$summary.fixed$`0.025quant`[1])/tscal0)
+R0_2nd_975 = exp((m.pois_new_second$summary.fixed$`0.975quant`[1])/tscal0)
+
+
+################## modeling the Phase 3
+##################################    week number: 12-14
+### prepare training data from wk 12-14 since the reporting rate in cumsum is different
+new_2020_dat0 = data.frame(rbind(new_2020_dat0, NA))
+new_2020_dat0 = data.frame(rbind(new_2020_dat0, NA))
+new_2020_dat0 = data.frame(rbind(new_2020_dat0, NA))
+
+new_2020_dat0$I[4:6] = train0_2020$I[12:14]
+new_2020_dat0$logyminus_one[4:6] = log(new_2020_dat0$I[3:5])
+
+for (i in 4:4){
+  new_2020_dat0$cumsum_yminus_over_N[i] = new_2020_dat0$cumsum_yminus_over_N[i-1] + (new_2020_dat0$I[i-1]/train0_2020$N[1])
+  new_2020_dat0$cumsum_yminus_over_N_p[i] = new_2020_dat0$cumsum_yminus_over_N_p[i-1] + (new_2020_dat0$I[i-1]/(train0_2020$N[1]*mean(adj_report_rate1_all)))
+  new_2020_dat0$logyminus_one_over_p[i] = log(exp(new_2020_dat0$logyminus_one[i])/mean(adj_report_rate1_all))
+  new_2020_dat0$I_over_p[i] = round(new_2020_dat0$I[i]/mean(adj_report_rate2_all),digits = 0)
+  # print(i)
+}
+for (i in 5:6){
+  new_2020_dat0$cumsum_yminus_over_N[i] = new_2020_dat0$cumsum_yminus_over_N[i-1] + (new_2020_dat0$I[i-1]/train0_2020$N[1])
+  new_2020_dat0$cumsum_yminus_over_N_p[i] = new_2020_dat0$cumsum_yminus_over_N_p[i-1] + (new_2020_dat0$I[i-1]/(train0_2020$N[1]*mean(adj_report_rate2_all)))
+  new_2020_dat0$logyminus_one_over_p[i] = log(exp(new_2020_dat0$logyminus_one[i])/mean(adj_report_rate2_all))
+  new_2020_dat0$I_over_p[i] = round(new_2020_dat0$I[i]/mean(adj_report_rate2_all),digits = 0)
+}
+
+
+y0 = c(tail(new_2020_dat0$I_over_p,3),rep(NA,length(tail(new_2020_dat0$I,3))))
+x1 = rep(tail(new_2020_dat0$logyminus_one_over_p,3),2)
+x2 = rep(tail(new_2020_dat0$cumsum_yminus_over_N_p,3),2)
+dat0_poi = data.frame(y0,x1,x2)
+
+
+m.pois_new <- inla(y0 ~ x1 + x2  ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T),control.fixed = list(mean=list(x1=m.pois$summary.fixed$mean[2], x2=-tscal0, default=0),prec=list(x1=prior0_prec_x1, x2=prior0_prec_x2))) 
+summary(m.pois_new)
+
+m.pois_new_third = m.pois_new
+
+## new R0 for Phase 3
+R0_3rd_mean = exp((m.pois_new_third$summary.fixed$mean[1])/tscal0)
+R0_3rd_025 = exp((m.pois_new_third$summary.fixed$`0.025quant`[1])/tscal0)
+R0_3rd_975 = exp((m.pois_new_third$summary.fixed$`0.975quant`[1])/tscal0)
+
+
+## prepare Rt data
+## prepare cumsum_yminus_over_N_p and yminus_one
+dat0_for_Rt = train0_2020[1:9,]
+dat0_for_Rt$cumsum_yminus_over_N_p = dat0_for_Rt$cumsum_yminus_over_N/mean(ori_report_rate_all)
+for (i in 10:(nrow(train0_2020)+1)){
+  dat0_for_Rt = rbind(dat0_for_Rt,NA)
+}
+dat0_for_Rt$I[10:nrow(train0_2020)] = train0_2020$I[10:nrow(train0_2020)]
+for (i in 10:12){
+  dat0_for_Rt$cumsum_yminus_over_N_p[i] = dat0_for_Rt$cumsum_yminus_over_N_p[i-1] + (dat0_for_Rt$I[i-1]/(dat0_for_Rt$N[1]*mean(adj_report_rate1_all)))  
+  dat0_for_Rt$yminus_one[i] = dat0_for_Rt$I[i-1]
+}
+for (i in 13:15){
+  dat0_for_Rt$cumsum_yminus_over_N_p[i] = dat0_for_Rt$cumsum_yminus_over_N_p[i-1] + (dat0_for_Rt$I[i-1]/(dat0_for_Rt$N[1]*mean(adj_report_rate2_all)))  
+  dat0_for_Rt$yminus_one[i] = dat0_for_Rt$I[i-1]
+}
+row.names(dat0_for_Rt)=NULL
+dat0_for_Rt = dat0_for_Rt[-1,]    ## delete the first row to match the Rt, i.e. Rt is to predict I(t+1)
+
+## Rt at Phase 1, 2020 (i.e., original)
+Rt_first = (mean(R0_1st_mean_all)*(1-c(train0_combine$cumsum_yminus_over_N[train0_combine$gp2020==1][-1]/mean(ori_report_rate_all))))^tscal0
+Rt_first_025 = (R0_1st_025*(1-c(train0_combine$cumsum_yminus_over_N[train0_combine$gp2020==1][-1]/mean(ori_report_rate_all))))^tscal0
+Rt_first_975 = (R0_1st_975*(1-c(train0_combine$cumsum_yminus_over_N[train0_combine$gp2020==1][-1]/mean(ori_report_rate_all))))^tscal0
+
+## Rt at Phase 2, 2020
+Rt_second = (c(rep(R0_2nd_mean,3),rep(R0_3rd_mean,4))*(1-dat0_for_Rt$cumsum_yminus_over_N_p[8:14]))^tscal0  ## starting from week 8 Rt (t=8)
+Rt_second_025 = (c(rep(R0_2nd_025,3),rep(R0_3rd_025,4))*(1-dat0_for_Rt$cumsum_yminus_over_N_p[8:14]))^tscal0  
+Rt_second_975 = (c(rep(R0_2nd_975,3),rep(R0_3rd_975,4))*(1-dat0_for_Rt$cumsum_yminus_over_N_p[8:14]))^tscal0  ## starting from week 8 Rt (t=8)
+
+
+Rt_all_over_p = c(Rt_first,Rt_second)
+Rt_all_over_p_025 = c(Rt_first_025,Rt_second_025)
+Rt_all_over_p_975 = c(Rt_first_975,Rt_second_975)
+
+Rt_all_over_p = sqrt(Rt_all_over_p) 
+Rt_all_over_p_025 = sqrt(Rt_all_over_p_025)
+Rt_all_over_p_975 = sqrt(Rt_all_over_p_975)
+
+Rt_all_over_p_all = rbind(Rt_all_over_p,Rt_all_over_p_025,Rt_all_over_p_975)
+
+
+
+```
+
+
+
+
+## description about the flow of model fitting
+- fitting Phase 1 by poisson regression
+- get the distribution of original reporting rate using inverse transform sampling based on the marginal distribution of "cumsum_yminus_over_N"
+- calculate the distribution of adjusted reporting rate for Phase 2 and 3
+- get distribution of R0 in Phase 1 using inverse transform sampling based on the marginal distribution of "intercept"
+
+-	Using the distribution of reporting rate, estimate the precision parameter to be input in INLA model when regressing on phase 2 and phase 3
+- regress on phase 2 and phase 3 cases through INLA with pre-set precision value
+
+
+
+
+
+
+
