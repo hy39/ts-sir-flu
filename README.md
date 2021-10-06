@@ -34,6 +34,6 @@ To generate Fig. 4:
  run **plot_Fig4.R** 
  
 <br/>
-To obtain the results from effectiveness-behaviour model:
+To obtain the results from effectiveness-behaviour analysis:
 
  run **Code for effectiveness-behaviour model.R** 
