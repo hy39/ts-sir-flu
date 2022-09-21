@@ -11,7 +11,7 @@ set.seed(1992)
 ## Sample the Phase 2 contact-rate reduction and behaviours
 df0_p1 = NULL
 for (i in 1:run0){
-  df0_p1 = rbind(df0_p1, c(1-exp(sample(m.pois_new_second$marginals.fixed$`(Intercept)`[,1],prob = m.pois_new_second$marginals.fixed$`(Intercept)`[,2]/sum(m.pois_new_second$marginals.fixed$`(Intercept)`[,2]),size = 1)/tscal0)/sam_1,rbinom(n = 1,size = 7000000,prob = 627/1008)/7000000,rbinom(n = 1,size = 7000000,prob = 778/1008)/7000000))
+  df0_p1 = rbind(df0_p1, c(1-exp(sample(m.pois_new_second$marginals.fixed$`(Intercept)`[,1],prob = m.pois_new_second$marginals.fixed$`(Intercept)`[,2]/sum(m.pois_new_second$marginals.fixed$`(Intercept)`[,2]),size = 1)/tscal0)/sam_1,rbinom(n = 1,size = 7395278,prob = 627/1008)/7395278,rbinom(n = 1,size = 7395278,prob = 778/1008)/7395278))
 }
 df0_p1 = data.frame(df0_p1)
 names(df0_p1) = c("y0","crowd","mask")
@@ -20,12 +20,12 @@ names(df0_p1) = c("y0","crowd","mask")
 ## sample the Phase 1 behaviours
 sam_0_sd_all = NULL
 for (i in 1:run0){
-  sam_0_sd = rbinom(n = 1,size = 7000000,prob = 25/66)/7000000
+  sam_0_sd = rbinom(n = 1,size = 7395278,prob = 25/66)/7395278
   sam_0_sd_all = c(sam_0_sd_all,sam_0_sd)
 }
 sam_0_mask_all = NULL
 for (i in 1:run0){
-  sam_0_mask = rbinom(n = 1,size = 7000000,prob = 30/66)/7000000
+  sam_0_mask = rbinom(n = 1,size = 7395278,prob = 30/66)/7395278
   sam_0_mask_all = c(sam_0_mask_all,sam_0_mask)
 }
 
@@ -43,7 +43,7 @@ df0_p1$mask = df0_p1$mask[order(df0_p1$mask)]
 ## Sample the Phase 3 contact-rate reduction and behaviours
 df0_p2 = NULL
 for (i in 1:run0){
-  df0_p2 = rbind(df0_p2,c(1-exp(sample(m.pois_new_third$marginals.fixed$`(Intercept)`[,1],prob = m.pois_new_third$marginals.fixed$`(Intercept)`[,2]/sum(m.pois_new_third$marginals.fixed$`(Intercept)`[,2]),size = 1)/tscal0)/sam_1,rbinom(n = 1,size = 7000000,prob = 920/1000)/7000000,rbinom(n = 1,size = 7000000,prob = 976/1000)/7000000))
+  df0_p2 = rbind(df0_p2,c(1-exp(sample(m.pois_new_third$marginals.fixed$`(Intercept)`[,1],prob = m.pois_new_third$marginals.fixed$`(Intercept)`[,2]/sum(m.pois_new_third$marginals.fixed$`(Intercept)`[,2]),size = 1)/tscal0)/sam_1,rbinom(n = 1,size = 7395278,prob = 920/1000)/7395278,rbinom(n = 1,size = 7395278,prob = 976/1000)/7395278))
 }
 df0_p2 = data.frame(df0_p2)
 names(df0_p2) = c("y0","crowd","mask")
@@ -75,7 +75,3 @@ print(paste("Effectiveness of avoiding crowded places (95% CI):", mean(res0_rank
 print(paste("Estimated R0 when nobody wears mask or adopts social distancing:", mean(R0_zero_rank),"(",quantile(R0_zero_rank,probs = c(0.025)),", ",quantile(R0_zero_rank,probs = c(0.975)),")"))
 
 print(paste("Percentage of people required to adopt precautionary behaviours in order to lower R0 below 1:", mean(percentage_for_one_rank),"(",quantile(percentage_for_one_rank,probs = c(0.025)),", ",quantile(percentage_for_one_rank,probs = c(0.975)),")"))
-
-
-
-
