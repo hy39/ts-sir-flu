@@ -1,7 +1,7 @@
 ---
-title: "Code for Lin et al., 2021"
+title: "Code for Lin et al., 2022"
 author: "CP Lin"
-date: "2021/6/12"
+date: "2022/9/20"
 output: html_document
 editor_options: 
   chunk_output_type: console
@@ -14,7 +14,7 @@ library(INLA)
 ```{r}
 ## read the raw data file from flu express
 dat0 <- read.csv("dat0.csv",header = T)  
-dat0$date = as.Date(dat0$ï..date, origin = "1899-12-30")
+dat0$date = as.Date(dat0$date, origin = "1899-12-30")
 
 
 ### prepare "train0_combine"
@@ -23,23 +23,23 @@ names(train0) = c("dates","I")
 
 train0_2016 = train0[35:62,] ## weekly
 train0_2016$yminus_one = train0$I[34:61]
-train0_2016$N = 7000000 - sum(train0$I[6:34])/0.2
-train0_2016$cumsum_yminus = cumsum(train0_2016$yminus_one)
+train0_2016$N = 7336585 #- sum(train0$I[6:34])/0.2
+train0_2016$cumsum_yminus = cumsum(train0_2016$yminus_one) + sum(train0$I[6:34])*0.3
 
 train0_2018 = train0[140:161,] ## weekly
 train0_2018$yminus_one = train0$I[139:160]
-train0_2018$N = 7000000 - sum(train0$I[105:139])/0.2
-train0_2018$cumsum_yminus = cumsum(train0_2018$yminus_one)
+train0_2018$N = 7365931 #- sum(train0$I[105:139])/0.2
+train0_2018$cumsum_yminus = cumsum(train0_2018$yminus_one) + sum(train0$I[105:139])*0.3
 
 train0_2019 = train0[185:210,] ## weekly
 train0_2019$yminus_one = train0$I[184:209]
-train0_2019$N = 7000000 - sum(train0$I[160:184])/0.2
-train0_2019$cumsum_yminus = cumsum(train0_2019$yminus_one)
+train0_2019$N = 7380605 # - sum(train0$I[160:184])/0.2
+train0_2019$cumsum_yminus = cumsum(train0_2019$yminus_one) + sum(train0$I[160:184])*0.3
 
 train0_2020 = train0[242:255,]  ## weekly
 train0_2020$yminus_one = train0$I[241:254]
-train0_2020$N = 7000000 - sum(train0$I[212:241])/0.2
-train0_2020$cumsum_yminus = cumsum(train0_2020$yminus_one)
+train0_2020$N = 7395278 # - sum(train0$I[212:241])/0.2
+train0_2020$cumsum_yminus = cumsum(train0_2020$yminus_one) + sum(train0$I[212:241])*0.3
 
 train0_2016$gp = 2016
 train0_2018$gp = 2018
@@ -101,9 +101,11 @@ for (i in 1:20){
   
   dat0_poi = data.frame(y0,x1,x2,x3,x4,x5)
   
-  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T))
+  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T),control.compute = list(config=T),control.fixed = list(mean=list(x1=1,default=0),prec=list(x1=100000000000)))
+  # m.pois00 <- glm(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi)
   
-  pred0_log = tail(m.pois00$summary.fitted.values$mean,1)   ## consider the mean of bayesian 
+  pred0_log = tail(m.pois00$summary.fitted.values$mean,1)   ## consider the mean of bayesian
+  # pred0_log = predict(m.pois01,newdata = tail(dat0_poi,1))
 
   new_dat0[nrow(new_dat0),"logI"] = pred0_log
   new_dat0[nrow(new_dat0),"I"] = exp(pred0_log)
@@ -142,7 +144,7 @@ for (i in 1:20){
   
   dat0_poi = data.frame(y0,x1,x2,x3,x4,x5)
   
-  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T))
+  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T),control.compute = list(config=T),control.fixed = list(mean=list(x1=1,default=0),prec=list(x1=100000000000)))
   
   pred0_log = tail(m.pois00$summary.fitted.values$"0.025quant",1)   ## consider the 0.025quantile of bayesian
 
@@ -182,7 +184,7 @@ for (i in 1:20){
   
   dat0_poi = data.frame(y0,x1,x2,x3,x4,x5)
   
-  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T))
+  m.pois00 <- inla(y0 ~ x1 + x2 + x3 + x4 + x5 ,family = "poisson",data = dat0_poi,control.predictor = list(compute=T),control.compute = list(config=T),control.fixed = list(mean=list(x1=1,default=0),prec=list(x1=100000000000)))
   
   pred0_log = tail(m.pois00$summary.fitted.values$"0.975quant",1)   ## consider the 0.975quantile of bayesian
   
@@ -391,7 +393,40 @@ Rt_all_over_p_all = rbind(Rt_all_over_p,Rt_all_over_p_025,Rt_all_over_p_975)
 
 ```
 
+## Get the mean of Rt at each phase
+```{r}
+## before COVID, Phase 1
+mean(Rt_all_over_p_all[1,1:7])
+mean(Rt_all_over_p_all[2,1:7])
+mean(Rt_all_over_p_all[3,1:7])
 
+## after COVID, Phase 2
+mean(Rt_all_over_p_all[1,8:10])
+mean(Rt_all_over_p_all[2,8:10])
+mean(Rt_all_over_p_all[3,8:10])
+
+## after COVID, Phase 3
+mean(Rt_all_over_p_all[1,11:14])
+mean(Rt_all_over_p_all[2,11:14])
+mean(Rt_all_over_p_all[3,11:14])
+
+```
+
+## percentage decrease of flu case number as compared with there is no COVID
+```{r}
+sum(new_dat0_origin_model_INLA$I[2:7]) ## predicted sum of cases after COVID
+sum(tail(train0_2020$I,6)) ## true sum of cases after COVID
+
+## percentage decrease of flu case number
+(sum(new_dat0_origin_model_INLA$I[2:7])-sum(tail(train0_2020$I,6)))/sum(new_dat0_origin_model_INLA$I[2:7])
+```
+
+## Get the R0
+```{r}
+round(exp((m.pois$summary.fixed$mean[1])/tscal0),digits = 2)
+round(exp((m.pois$summary.fixed$`0.025quant`[1])/tscal0),digits = 2)
+round(exp((m.pois$summary.fixed$`0.975quant`[1])/tscal0),digits = 2)
+```
 
 
 ## description about the flow of model fitting
@@ -402,10 +437,6 @@ Rt_all_over_p_all = rbind(Rt_all_over_p,Rt_all_over_p_025,Rt_all_over_p_975)
 
 -	Using the distribution of reporting rate, estimate the precision parameter to be input in INLA model when regressing on phase 2 and phase 3
 - regress on phase 2 and phase 3 cases through INLA with pre-set precision value
-
-
-
-
 
 
 
