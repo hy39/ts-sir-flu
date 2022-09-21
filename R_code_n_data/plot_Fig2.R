@@ -1,4 +1,4 @@
-png("flu_pred_2020_new16.png", width=886*2.5, height=558*2.5, res=300)
+png("flu_pred_2020_new17.png", width=886*2.5, height=558*2.5, res=300)
 
 ## prepare date variable
 temp0 = train0_2020$dates[1:7]
@@ -38,7 +38,7 @@ text(x=as.Date("2020-01-22"),y = c(4500),labels = bquote(Phi[2] == .((1-round(R0
 text(x=as.Date("2020-01-22"),y = c(4200),labels = paste(" (",(1-round(R0_2nd_975/quantile(R0_1st_mean_all,probs = 0.025),digits = 3))*100,"%",",",(1-round(R0_2nd_025/quantile(R0_1st_mean_all,probs = 0.975),digits = 3))*100,"%",")",sep = ""),cex=0.7,col=1)
 text(x=as.Date("2020-02-13"),y = c(4500),labels = bquote(Phi[3] == .((1-round(R0_3rd_mean/mean(R0_1st_mean_all),digits = 3))*100)*"%"),cex=0.7,col=1)
 text(x=as.Date("2020-02-13"),y = c(4200),labels = paste(" (",(1-round(R0_3rd_975/quantile(R0_1st_mean_all,probs = 0.025),digits = 3))*100,"%",",",(1-round(R0_3rd_025/quantile(R0_1st_mean_all,probs = 0.975),digits = 3))*100,"%",")",sep = ""),cex=0.7,col=1)
-text(x=as.Date("2019-11-26"),y = 600,labels = bquote(""*R[t]*" = "*.(round(exp((m.pois$summary.fixed$mean[1])/tscal0),digits = 2))),cex=0.7,col=1)
+text(x=as.Date("2019-11-26"),y = 600,labels = bquote(""*R[t]*" = "*.(round(Rt_all_over_p_all[1,1],digits = 2))),cex=0.7,col=1)
 points(train0_2020$dates[c(1,8,11,14)],train0_2020$I[c(1,8,11,14)],pch=16,lwd=2,cex=1.4)
 legend("topright",legend = c("Reported influenza cases","Model prediction in Phase 2","Model prediction in Phase 3","Model projection without intervention"),col=c(1,2,3,8),lty = c(1,1,1,1),pch = c(1,NA,NA,NA),cex=0.64,lwd = c(1,2,2,2))
 
