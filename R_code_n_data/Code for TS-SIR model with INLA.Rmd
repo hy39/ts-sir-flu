@@ -23,22 +23,22 @@ names(train0) = c("dates","I")
 
 train0_2016 = train0[35:62,] ## weekly
 train0_2016$yminus_one = train0$I[34:61]
-train0_2016$N = 7336585 #- sum(train0$I[6:34])/0.2
+train0_2016$N = 7336585
 train0_2016$cumsum_yminus = cumsum(train0_2016$yminus_one) + sum(train0$I[6:34])*0.3
 
 train0_2018 = train0[140:161,] ## weekly
 train0_2018$yminus_one = train0$I[139:160]
-train0_2018$N = 7365931 #- sum(train0$I[105:139])/0.2
+train0_2018$N = 7365931
 train0_2018$cumsum_yminus = cumsum(train0_2018$yminus_one) + sum(train0$I[105:139])*0.3
 
 train0_2019 = train0[185:210,] ## weekly
 train0_2019$yminus_one = train0$I[184:209]
-train0_2019$N = 7380605 # - sum(train0$I[160:184])/0.2
+train0_2019$N = 7380605
 train0_2019$cumsum_yminus = cumsum(train0_2019$yminus_one) + sum(train0$I[160:184])*0.3
 
 train0_2020 = train0[242:255,]  ## weekly
 train0_2020$yminus_one = train0$I[241:254]
-train0_2020$N = 7395278 # - sum(train0$I[212:241])/0.2
+train0_2020$N = 7395278
 train0_2020$cumsum_yminus = cumsum(train0_2020$yminus_one) + sum(train0$I[212:241])*0.3
 
 train0_2016$gp = 2016
